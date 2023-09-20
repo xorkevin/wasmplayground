@@ -6,9 +6,7 @@ const textEncoder = new TextEncoder();
 // TextDecoder only supports utf-8
 const textDecoder = new TextDecoder();
 
-const wasmbuf = await fs.readFile(
-  './target/wasm32-unknown-unknown/release/wasmplayground.wasm',
-);
+const wasmbuf = await fs.readFile('./bin/wasmplayground.wasm');
 const wasmmod = await WebAssembly.compile(wasmbuf);
 
 let wasmInstance;
