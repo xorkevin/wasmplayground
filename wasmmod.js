@@ -1,12 +1,10 @@
-import fs from 'node:fs/promises';
-
 // TextEncoder only supports utf-8
 const textEncoder = new TextEncoder();
 
 // TextDecoder only supports utf-8
 const textDecoder = new TextDecoder();
 
-class WasmModInstance {
+export class WasmModInstance {
   constructor(mod) {
     this.mod = mod;
   }
@@ -85,11 +83,3 @@ class WasmModInstance {
     }
   }
 }
-
-const wasmbuf = await fs.readFile('./bin/wasmplayground.wasm');
-const wasmmod = await WebAssembly.compile(wasmbuf);
-
-const wasmModInstance = new WasmModInstance(wasmmod);
-await wasmModInstance.init();
-
-console.log(wasmModInstance.callStrFn('greet', 'world'));

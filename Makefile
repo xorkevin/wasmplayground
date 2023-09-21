@@ -11,4 +11,4 @@ optimize:
 	wasm-opt -Os -o ./bin/wasmplayground.wasm ./target/wasm32-unknown-unknown/release/wasmplayground.wasm
 
 run:
-	node ./wasmmod.js
+	node ./main.js
