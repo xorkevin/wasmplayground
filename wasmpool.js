@@ -53,6 +53,7 @@ export class WasmPool {
   #workers;
   #pool;
   #sharedBuffer;
+  #isClosing;
 
   constructor(options) {
     this.#options = Object.assign({}, defaultOptions, options);
@@ -65,10 +66,14 @@ export class WasmPool {
       new SharedArrayBuffer(1 * Int32Array.BYTES_PER_ELEMENT),
     );
     Atomics.store(this.#sharedBuffer, 0, this.#options.maxThreads);
+    this.#isClosing = false;
   }
 
   async getWorker(timeout_ms = 0) {
     while (true) {
+      if (this.#isClosing) {
+        throw new Error('pool closing');
+      }
       const remaining = Atomics.load(this.#sharedBuffer, 0);
       if (remaining > 0) {
         break;
@@ -111,6 +116,12 @@ export class WasmPool {
 
   putWorker(worker) {
     const old = Atomics.add(this.#sharedBuffer, 0, 1);
+    if (this.#isClosing) {
+      if (!worker.isExited) {
+        worker.terminate();
+      }
+      return;
+    }
     if (old + 1 > 0) {
       if (!worker.isExited) {
         this.#pool.push(worker);
@@ -149,6 +160,18 @@ export class WasmPool {
         break;
       }
       w.terminate();
+    }
+  }
+
+  close() {
+    this.#isClosing = true;
+    // notify all waiters
+    Atomics.notify(this.#sharedBuffer, 0);
+    while (this.#pool.length > 0) {
+      const w = this.#getWorkerFromPool();
+      if (w) {
+        w.terminate();
+      }
     }
   }
 }
