@@ -2,7 +2,6 @@ import path from 'node:path';
 import {Worker, MessageChannel} from 'node:worker_threads';
 
 const defaultOptions = Object.freeze({
-  minThreads: 1,
   maxThreads: 8,
 });
 
@@ -25,6 +24,7 @@ class WasmWorker {
     this.isExited = false;
     this.exited = new Promise((resolve) => {
       this.#worker.on('exit', () => {
+        this.#port.close();
         this.isExited = true;
         this.#workers.delete(w);
         resolve();
@@ -42,32 +42,41 @@ class WasmWorker {
       port2,
     ]);
   }
+
+  terminate() {
+    return this.#worker.terminate();
+  }
 }
 
 export class WasmPool {
+  #options;
+  #workers;
+  #pool;
+  #sharedBuffer;
+
   constructor(options) {
-    this.options = Object.assign({}, defaultOptions, options);
-    this.workers = new Set();
-    this.pool = [];
-    this.sharedBuffer = new Int32Array(
+    this.#options = Object.assign({}, defaultOptions, options);
+    if (options.maxThreads < 0) {
+      throw new Error('max threads must be positive');
+    }
+    this.#workers = new Set();
+    this.#pool = [];
+    this.#sharedBuffer = new Int32Array(
       new SharedArrayBuffer(1 * Int32Array.BYTES_PER_ELEMENT),
     );
-    Atomics.store(this.sharedBuffer, 0, this.options.maxThreads);
+    Atomics.store(this.#sharedBuffer, 0, this.#options.maxThreads);
   }
 
   async getWorker(timeout_ms = 0) {
     while (true) {
-      const remaining = Atomics.load(this.sharedBuffer, 0);
-      if (remaining < 0) {
-        throw new Error('Invariant violation: less than 0 remaining');
-      }
+      const remaining = Atomics.load(this.#sharedBuffer, 0);
       if (remaining > 0) {
         break;
       }
       const res =
-        timeout_ms === 0
-          ? Atomics.waitAsync(this.sharedBuffer, 0, 0)
-          : Atomics.waitAsync(this.sharedBuffer, 0, 0, timeout_ms);
+        timeout_ms > 0
+          ? Atomics.waitAsync(this.#sharedBuffer, 0, remaining, timeout_ms)
+          : Atomics.waitAsync(this.#sharedBuffer, 0, remaining);
       if (!res.async) {
         if (res.value === ATOMIC_TIMED_OUT) {
           throw new Error('timed out');
@@ -81,18 +90,18 @@ export class WasmPool {
     {
       const w = this.#getWorkerFromPool();
       if (w) {
-        Atomics.add(this.sharedBuffer, 0, -1);
+        Atomics.add(this.#sharedBuffer, 0, -1);
         return w;
       }
     }
-    const w = new WasmWorker(this.workers);
-    Atomics.add(this.sharedBuffer, 0, -1);
+    const w = new WasmWorker(this.#workers);
+    Atomics.add(this.#sharedBuffer, 0, -1);
     return w;
   }
 
   #getWorkerFromPool() {
-    while (this.pool.length > 0) {
-      const candidate = this.pool.shift();
+    while (this.#pool.length > 0) {
+      const candidate = this.#pool.shift();
       if (!candidate.isExited) {
         return candidate;
       }
@@ -101,10 +110,45 @@ export class WasmPool {
   }
 
   putWorker(worker) {
-    Atomics.add(this.sharedBuffer, 0, 1);
-    if (!worker.isExited) {
-      this.pool.push(worker);
+    const old = Atomics.add(this.#sharedBuffer, 0, 1);
+    if (old + 1 > 0) {
+      if (!worker.isExited) {
+        this.#pool.push(worker);
+      }
+      Atomics.notify(this.#sharedBuffer, 0, 1);
+    } else {
+      if (!worker.isExited) {
+        worker.terminate();
+      }
     }
-    Atomics.notify(this.sharedBuffer, 0, 1);
+  }
+
+  setMaxThreads(num) {
+    if (num < 0) {
+      throw new Error('min threads must be positive');
+    }
+    const delta = num - this.#options.maxThreads;
+    this.#options.maxThreads = num;
+    if (delta === 0) {
+      return;
+    }
+    const old = Atomics.add(this.#sharedBuffer, 0, delta);
+    if (delta > 0) {
+      if (old + 1 > 0) {
+        Atomics.notify(this.#sharedBuffer, 0, Math.min(old + 1, delta));
+      }
+      return;
+    }
+    const decr = this.#workers.size - this.#options.maxThreads;
+    if (decr <= 0) {
+      return;
+    }
+    for (let i = 0; i < decr; i++) {
+      const w = this.#getWorkerFromPool();
+      if (!w) {
+        break;
+      }
+      w.terminate();
+    }
   }
 }
