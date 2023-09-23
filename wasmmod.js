@@ -76,8 +76,8 @@ export class WasmModInstance {
   callStrFn(name, arg) {
     const argptr = this.mallocString(arg);
     try {
-      const res = this.instance.exports[name](argptr);
-      return this.readStringAndFree(res);
+      const ret = this.instance.exports[name](argptr);
+      return this.readStringAndFree(ret);
     } finally {
       this.free(argptr);
     }
