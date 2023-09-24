@@ -100,6 +100,19 @@ class WasmWorker {
   }
 
   async callStrFn(id, mod, fnname, arg, {timeoutMS = 0} = {}) {
+    if (!id || typeof id !== 'string') {
+      throw new Error('Must provide mod id');
+    }
+    if (!mod) {
+      throw new Error('Must provide wasm mod');
+    }
+    if (!fnname || typeof fnname !== 'string') {
+      throw new Error('Must provide fn name');
+    }
+    if (typeof arg !== 'string') {
+      throw new Error('Must provide fn arg');
+    }
+
     if (this.isTerminating) {
       if (this.#lastError) {
         throw new Error('worker terminating', {cause: this.#lastError});
@@ -180,7 +193,7 @@ export class WasmPool {
     this.#isClosing = false;
   }
 
-  async getWorker(timeoutMS = 0) {
+  async getWorker({timeoutMS = 0} = {}) {
     while (true) {
       if (this.#isClosing) {
         throw new Error('pool closing');
@@ -246,8 +259,8 @@ export class WasmPool {
     }
   }
 
-  setMaxThreads(num) {
-    if (num < 0) {
+  setMaxThreads(num = 0) {
+    if (typeof num !== 'number' || num < 0) {
       throw new Error('min threads must be positive');
     }
     const delta = num - this.#options.maxThreads;
@@ -279,6 +292,29 @@ export class WasmPool {
     }
   }
 
+  async primeThreads(num = 0) {
+    if (typeof num !== 'number' || num <= 0) {
+      num = this.#options.maxThreads;
+    }
+    const delta = num - this.#workers.size;
+    const remaining = Atomics.load(this.#sharedBuffer, POOL_IDX.SEM);
+    const incr = Math.min(remaining, delta);
+    if (incr <= 0) {
+      return;
+    }
+    const workers = await Promise.allSettled(
+      new Array(incr).fill(0).map(() => this.getWorker({timeoutMS: 10})),
+    );
+    for (const w of workers) {
+      if (w.status === 'fulfilled') {
+        console.log('primed worker');
+        this.putWorker(w.value);
+      } else {
+        console.log('Failed to prime worker', w.reason);
+      }
+    }
+  }
+
   close() {
     if (this.#isClosing) {
       return;
@@ -295,8 +331,8 @@ export class WasmPool {
     }
   }
 
-  async withWorker(f) {
-    const worker = await this.getWorker();
+  async withWorker(f, options = {}) {
+    const worker = await this.getWorker(options);
     try {
       await worker.ready;
       // wait for f to finish

@@ -20,6 +20,12 @@ if (!worker.isMainThread) {
   Atomics.store(SHARED_BUFFER, WORKER_IDX.READY, 1);
   Atomics.notify(SHARED_BUFFER, WORKER_IDX.READY);
 
+  const reply = (msg) => {
+    PORT.postMessage(msg);
+    Atomics.add(SHARED_BUFFER, WORKER_IDX.RCV, 1);
+    Atomics.notify(SHARED_BUFFER, WORKER_IDX.RCV);
+  };
+
   let MOD = EMPTY_MOD;
 
   while (true) {
@@ -36,36 +42,80 @@ if (!worker.isMainThread) {
         break;
       }
       Atomics.add(SHARED_BUFFER, WORKER_IDX.SEND, -1);
-      if (msg.message) {
-        const {id, mod, fnname, arg} = msg.message;
-        if (id !== MOD.id) {
+
+      if (!msg.message) {
+        reply({
+          modTimeNS: 0,
+          fnTimeNS: 0,
+          ret: null,
+          reterr: new Error('Invalid message'),
+        });
+        continue;
+      }
+
+      const {id, mod, fnname, arg} = msg.message;
+
+      try {
+        if (!id || typeof id !== 'string') {
+          throw new Error('Must provide mod id');
+        }
+        if (!mod) {
+          throw new Error('Must provide wasm mod');
+        }
+        if (!fnname || typeof fnname !== 'string') {
+          throw new Error('Must provide fn name');
+        }
+        if (typeof arg !== 'string') {
+          throw new Error('Must provide fn arg');
+        }
+      } catch (err) {
+        reply({
+          modTimeNS: 0,
+          fnTimeNS: 0,
+          ret: null,
+          reterr: new Error('Invalid message'),
+        });
+        continue;
+      }
+
+      const modStart = process.hrtime.bigint();
+      if (id !== MOD.id) {
+        try {
           MOD = {
             id,
             instance: new wasmmod.WasmModInstance(mod),
           };
           await MOD.instance.init();
-        }
-        const start = process.hrtime.bigint();
-        let ret = null;
-        let reterr = null;
-        try {
-          ret = MOD.instance.callStrFn(fnname, arg);
         } catch (err) {
           MOD = EMPTY_MOD;
-          reterr = err;
+          const modEnd = process.hrtime.bigint();
+          reply({
+            modTimeNS: modEnd - modStart,
+            fnTimeNS: 0,
+            ret: null,
+            reterr: new Error('Failed to instantiate module', {cause: err}),
+          });
+          continue;
         }
-        const end = process.hrtime.bigint();
-        const deltaNS = end - start;
-        PORT.postMessage({deltaNS, ret, reterr});
-      } else {
-        PORT.postMessage({
-          deltaNS: 0,
-          ret: null,
-          reterr: new Error('Invalid message'),
-        });
       }
-      Atomics.add(SHARED_BUFFER, WORKER_IDX.RCV, 1);
-      Atomics.notify(SHARED_BUFFER, WORKER_IDX.RCV);
+
+      let ret = null;
+      let reterr = null;
+      const fnStart = process.hrtime.bigint();
+      try {
+        ret = MOD.instance.callStrFn(fnname, arg);
+      } catch (err) {
+        MOD = EMPTY_MOD;
+        reterr = err;
+      }
+      const fnEnd = process.hrtime.bigint();
+      const modEnd = process.hrtime.bigint();
+      reply({
+        modTimeNS: modEnd - modStart,
+        fnTimeNS: fnEnd - fnStart,
+        ret,
+        reterr,
+      });
     }
   }
 }
