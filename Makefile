@@ -1,6 +1,6 @@
 .PHONY: all build optimize run
 
-all: build run
+all: build optimize run
 
 build:
 	cargo build --release --target wasm32-unknown-unknown

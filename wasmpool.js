@@ -21,6 +21,11 @@ class WasmWorker {
   #worker;
   #port;
   #sharedBuffer;
+  #isExited;
+  #exited;
+  #isReady;
+  #ready;
+  #isTerminating;
 
   constructor(workers) {
     this.#workers = workers;
@@ -33,18 +38,19 @@ class WasmWorker {
       workerData: {sharedBuffer: this.#sharedBuffer, port: port2},
       transferList: [port2],
     });
-    this.isExited = false;
-    this.exited = new Promise((resolve) => {
+    this.#isExited = false;
+    this.#exited = new Promise((resolve) => {
       this.#worker.once('exit', () => {
         this.#port.close();
-        this.isExited = true;
+        this.#isTerminating = true;
+        this.#isExited = true;
         this.#workers.delete(this);
         resolve();
       });
     });
     this.#workers.add(this);
-    this.isReady = false;
-    this.ready = new Promise(async (resolve) => {
+    this.#isReady = false;
+    this.#ready = new Promise(async (resolve) => {
       while (true) {
         const status = Atomics.load(this.#sharedBuffer, WORKER_IDX.READY);
         if (status !== 0) {
@@ -55,12 +61,32 @@ class WasmWorker {
           await res.value;
         }
       }
-      this.isReady = true;
+      this.#isReady = true;
       resolve();
     });
   }
 
-  async callStrFn(id, mod, fnname, arg) {
+  get isExited() {
+    return this.#isExited;
+  }
+
+  get exited() {
+    return this.#exited;
+  }
+
+  get isReady() {
+    return this.#isReady;
+  }
+
+  get ready() {
+    return this.#ready;
+  }
+
+  get isTerminating() {
+    return this.#isTerminating;
+  }
+
+  async callStrFn(id, mod, fnname, arg, {timeoutMS = 0} = {}) {
     this.#port.postMessage({id, mod, fnname, arg});
     Atomics.add(this.#sharedBuffer, WORKER_IDX.SEND, 1);
     Atomics.notify(this.#sharedBuffer, WORKER_IDX.SEND);
@@ -69,9 +95,25 @@ class WasmWorker {
       if (status > 0) {
         break;
       }
-      const res = Atomics.waitAsync(this.#sharedBuffer, WORKER_IDX.RCV, status);
-      if (res.async) {
-        await res.value;
+      const res =
+        timeoutMS > 0
+          ? Atomics.waitAsync(
+              this.#sharedBuffer,
+              WORKER_IDX.RCV,
+              status,
+              timeoutMS,
+            )
+          : Atomics.waitAsync(this.#sharedBuffer, WORKER_IDX.RCV, status);
+      if (!res.async) {
+        if (res.value === ATOMIC_TIMED_OUT) {
+          this.terminate();
+          throw new Error('timed out');
+        }
+      } else {
+        if ((await res.value) === ATOMIC_TIMED_OUT) {
+          this.terminate();
+          throw new Error('timed out');
+        }
       }
     }
     const msg = receiveMessageOnPort(this.#port);
@@ -80,6 +122,10 @@ class WasmWorker {
   }
 
   terminate() {
+    if (this.#isTerminating) {
+      return;
+    }
+    this.#isTerminating = true;
     return this.#worker.terminate();
   }
 }
@@ -109,7 +155,7 @@ export class WasmPool {
     this.#isClosing = false;
   }
 
-  async getWorker(timeout_ms = 0) {
+  async getWorker(timeoutMS = 0) {
     while (true) {
       if (this.#isClosing) {
         throw new Error('pool closing');
@@ -119,12 +165,12 @@ export class WasmPool {
         break;
       }
       const res =
-        timeout_ms > 0
+        timeoutMS > 0
           ? Atomics.waitAsync(
               this.#sharedBuffer,
               POOL_IDX.SEM,
               remaining,
-              timeout_ms,
+              timeoutMS,
             )
           : Atomics.waitAsync(this.#sharedBuffer, POOL_IDX.SEM, remaining);
       if (!res.async) {
@@ -152,7 +198,7 @@ export class WasmPool {
   #getWorkerFromPool() {
     while (this.#pool.length > 0) {
       const candidate = this.#pool.shift();
-      if (!candidate.isExited) {
+      if (!candidate.isTerminating) {
         return candidate;
       }
     }
@@ -162,20 +208,16 @@ export class WasmPool {
   putWorker(worker) {
     const old = Atomics.add(this.#sharedBuffer, POOL_IDX.SEM, 1);
     if (this.#isClosing) {
-      if (!worker.isExited) {
-        worker.terminate();
-      }
+      worker.terminate();
       return;
     }
     if (old + 1 > 0) {
-      if (!worker.isExited) {
+      if (!worker.isTerminating) {
         this.#pool.push(worker);
       }
       Atomics.notify(this.#sharedBuffer, POOL_IDX.SEM, 1);
     } else {
-      if (!worker.isExited) {
-        worker.terminate();
-      }
+      worker.terminate();
     }
   }
 
