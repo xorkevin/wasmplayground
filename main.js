@@ -15,14 +15,16 @@ process.on('SIGINT', () => {
   wasmPool.close();
 });
 
-const res = await wasmPool.withWorker(async (worker) => {
-  return worker.callStrFn(
-    crypto.createHash('blake2b512').update(buf).digest('base64url'),
-    mod,
-    'greet',
-    'world',
-  );
-});
-console.log(res);
-
-wasmPool.close();
+try {
+  const res = await wasmPool.withWorker(async (worker) => {
+    return worker.callStrFn(
+      crypto.createHash('blake2b512').update(buf).digest('base64url'),
+      mod,
+      'greet',
+      'world',
+    );
+  });
+  console.log(res);
+} finally {
+  wasmPool.close();
+}
