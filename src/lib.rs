@@ -82,7 +82,7 @@ pub unsafe fn get_ptr_bytes(ptr: *const u8) -> &'static [u8] {
 pub unsafe fn read_str_arg(ptr: *const u8) -> String {
     match String::from_utf8(Vec::from(unsafe { get_ptr_bytes(ptr) })) {
         Ok(v) => v,
-        Err(e) => throw_str(&format!("invalid utf8 string: {:?}", e)),
+        Err(_) => throw_str("invalid utf8 string"),
     }
 }
 
@@ -100,7 +100,7 @@ pub fn malloc_str_ret(s: &str) -> *mut u8 {
 #[no_mangle]
 pub extern "C" fn greet(nameptr: *const u8) -> *mut u8 {
     let name = unsafe { read_str_arg(nameptr) };
-    malloc_str_ret(&format!("Hello, {}", name))
+    malloc_str_ret(&("Hello, ".to_owned() + &name))
 }
 
 // arg is caller freed
@@ -114,7 +114,7 @@ pub extern "C" fn long_greet(nameptr: *const u8) -> *mut u8 {
 #[no_mangle]
 pub extern "C" fn throw_greet(nameptr: *const u8) -> *mut u8 {
     let name = unsafe { read_str_arg(nameptr) };
-    throw_str(&format!("greet error: {}", name));
+    throw_str(&("greet error: ".to_owned() + &name));
 }
 
 // arg is caller freed
