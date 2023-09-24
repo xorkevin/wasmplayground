@@ -72,6 +72,27 @@ try {
   } catch (err) {
     console.log('res 5 err', err);
   }
+  try {
+    const res = await wasmPool.withWorker(async (worker) => {
+      debugger;
+      return worker.callStrFn(modid, mod, 'panic_greet', 'world', {
+        timeoutMS: 100,
+      });
+    });
+    console.log('res 6', res);
+  } catch (err) {
+    console.log('res 6 err', err);
+  }
+  try {
+    const res = await wasmPool.withWorker(async (worker) => {
+      return worker.callStrFn(modid, mod, 'greet', 'world', {
+        timeoutMS: 100,
+      });
+    });
+    console.log('res 7', res);
+  } catch (err) {
+    console.log('res 7 err', err);
+  }
 } finally {
   wasmPool.close();
 }

@@ -116,3 +116,10 @@ pub extern "C" fn throw_greet(nameptr: *const u8) -> *mut u8 {
     let name = unsafe { read_str_arg(nameptr) };
     throw_str(&format!("greet error: {}", name));
 }
+
+// arg is caller freed
+#[no_mangle]
+pub extern "C" fn panic_greet(nameptr: *const u8) -> *mut u8 {
+    let name = unsafe { read_str_arg(nameptr) };
+    panic!("greet panic: {}", name);
+}
