@@ -1,5 +1,8 @@
-import path from 'node:path';
-import {Worker, MessageChannel} from 'node:worker_threads';
+import {
+  Worker,
+  MessageChannel,
+  receiveMessageOnPort,
+} from 'node:worker_threads';
 
 const defaultOptions = Object.freeze({
   maxThreads: 8,
@@ -26,7 +29,7 @@ class WasmWorker {
     this.#sharedBuffer = new Int32Array(
       new SharedArrayBuffer(3 * Int32Array.BYTES_PER_ELEMENT),
     );
-    this.#worker = new Worker(path.resolve(__dirname, 'wasmpoolworker.js'), {
+    this.#worker = new Worker(new URL('./wasmpoolworker.js', import.meta.url), {
       workerData: {sharedBuffer: this.#sharedBuffer, port: port2},
       transferList: [port2],
     });
@@ -35,13 +38,13 @@ class WasmWorker {
       this.#worker.once('exit', () => {
         this.#port.close();
         this.isExited = true;
-        this.#workers.delete(w);
+        this.#workers.delete(this);
         resolve();
       });
     });
-    this.#workers.add(w);
+    this.#workers.add(this);
     this.isReady = false;
-    w.ready = new Promise(async (resolve) => {
+    this.ready = new Promise(async (resolve) => {
       while (true) {
         const status = Atomics.load(this.#sharedBuffer, WORKER_IDX.READY);
         if (status !== 0) {
@@ -55,6 +58,25 @@ class WasmWorker {
       this.isReady = true;
       resolve();
     });
+  }
+
+  async callStrFn(id, mod, fnname, arg) {
+    this.#port.postMessage({id, mod, fnname, arg});
+    Atomics.add(this.#sharedBuffer, WORKER_IDX.SEND, 1);
+    Atomics.notify(this.#sharedBuffer, WORKER_IDX.SEND);
+    while (true) {
+      const status = Atomics.load(this.#sharedBuffer, WORKER_IDX.RCV);
+      if (status > 0) {
+        break;
+      }
+      const res = Atomics.waitAsync(this.#sharedBuffer, WORKER_IDX.RCV, status);
+      if (res.async) {
+        await res.value;
+      }
+    }
+    const msg = receiveMessageOnPort(this.#port);
+    Atomics.add(this.#sharedBuffer, WORKER_IDX.RCV, -1);
+    return msg && msg.message;
   }
 
   terminate() {
@@ -75,7 +97,7 @@ export class WasmPool {
 
   constructor(options) {
     this.#options = Object.assign({}, defaultOptions, options);
-    if (options.maxThreads < 0) {
+    if (this.#options.maxThreads < 0) {
       throw new Error('max threads must be positive');
     }
     this.#workers = new Set();
@@ -191,6 +213,10 @@ export class WasmPool {
   }
 
   close() {
+    if (this.#isClosing) {
+      return;
+    }
+
     this.#isClosing = true;
     // notify all waiters
     Atomics.notify(this.#sharedBuffer, POOL_IDX.SEM);
@@ -199,6 +225,18 @@ export class WasmPool {
       if (w) {
         w.terminate();
       }
+    }
+  }
+
+  async withWorker(f) {
+    const worker = await this.getWorker();
+    try {
+      await worker.ready;
+      // wait for f to finish
+      const res = await f(worker);
+      return res;
+    } finally {
+      this.putWorker(worker);
     }
   }
 }

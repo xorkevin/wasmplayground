@@ -1,5 +1,6 @@
-import * as worker from 'node:worker_threads';
-import * as process from 'node:process';
+import worker from 'node:worker_threads';
+import process from 'node:process';
+
 import * as wasmmod from './wasmmod.js';
 
 const WORKER_IDX = Object.freeze({
@@ -32,19 +33,23 @@ while (true) {
       break;
     }
     Atomics.add(SHARED_BUFFER, WORKER_IDX.SEND, -1);
-    const {id, mod, fnname, arg} = msg;
-    if (id !== MOD.id) {
-      MOD = {
-        id,
-        instance: new wasmmod.WasmModInstance(mod),
-      };
-      await MOD.instance.init();
+    if (msg.message) {
+      const {id, mod, fnname, arg} = msg.message;
+      if (id !== MOD.id) {
+        MOD = {
+          id,
+          instance: new wasmmod.WasmModInstance(mod),
+        };
+        await MOD.instance.init();
+      }
+      const start = process.hrtime.bigint();
+      const ret = MOD.instance.callStrFn(fnname, arg);
+      const end = process.hrtime.bigint();
+      const deltaMS = Number((end - start) / 1000000n);
+      PORT.postMessage({deltaMS, ret});
+    } else {
+      PORT.postMessage({deltaMS: 0, ret: null});
     }
-    const start = process.hrtime.bigint();
-    const ret = MOD.instance.callStrFn(fnname, arg);
-    const end = process.hrtime.bigint();
-    const deltaMS = Number((end - start) / 1000000n);
-    PORT.postMessage({deltaMS, ret});
     Atomics.add(SHARED_BUFFER, WORKER_IDX.RCV, 1);
     Atomics.notify(SHARED_BUFFER, WORKER_IDX.RCV);
   }
