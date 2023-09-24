@@ -42,6 +42,10 @@ class WasmWorker {
     this.#worker.on('error', (err) => {
       console.log('error from worker', err);
       this.#lastError = err;
+      this.#isTerminating = true;
+      Atomics.notify(this.#sharedBuffer, WORKER_IDX.READY);
+      Atomics.notify(this.#sharedBuffer, WORKER_IDX.RCV);
+      this.#workers.delete(this);
     });
     this.#isExited = false;
     this.#exited = new Promise((resolve) => {
