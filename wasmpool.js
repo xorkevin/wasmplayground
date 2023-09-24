@@ -26,6 +26,7 @@ class WasmWorker {
   #isReady;
   #ready;
   #isTerminating;
+  #lastError;
 
   constructor(workers) {
     this.#workers = workers;
@@ -38,12 +39,18 @@ class WasmWorker {
       workerData: {sharedBuffer: this.#sharedBuffer, port: port2},
       transferList: [port2],
     });
+    this.#worker.on('error', (err) => {
+      console.log('error from worker', err);
+      this.#lastError = err;
+    });
     this.#isExited = false;
     this.#exited = new Promise((resolve) => {
       this.#worker.once('exit', () => {
         this.#port.close();
         this.#isTerminating = true;
         this.#isExited = true;
+        Atomics.notify(this.#sharedBuffer, WORKER_IDX.READY);
+        Atomics.notify(this.#sharedBuffer, WORKER_IDX.RCV);
         this.#workers.delete(this);
         resolve();
       });
@@ -52,6 +59,12 @@ class WasmWorker {
     this.#isReady = false;
     this.#ready = new Promise(async (resolve) => {
       while (true) {
+        if (this.isTerminating) {
+          if (this.#lastError) {
+            throw new Error('worker terminating', {cause: this.#lastError});
+          }
+          throw new Error('worker terminating');
+        }
         const status = Atomics.load(this.#sharedBuffer, WORKER_IDX.READY);
         if (status !== 0) {
           break;
@@ -87,10 +100,22 @@ class WasmWorker {
   }
 
   async callStrFn(id, mod, fnname, arg, {timeoutMS = 0} = {}) {
+    if (this.isTerminating) {
+      if (this.#lastError) {
+        throw new Error('worker terminating', {cause: this.#lastError});
+      }
+      throw new Error('worker terminating');
+    }
     this.#port.postMessage({id, mod, fnname, arg});
     Atomics.add(this.#sharedBuffer, WORKER_IDX.SEND, 1);
     Atomics.notify(this.#sharedBuffer, WORKER_IDX.SEND);
     while (true) {
+      if (this.isTerminating) {
+        if (this.#lastError) {
+          throw new Error('worker terminating', {cause: this.#lastError});
+        }
+        throw new Error('worker terminating');
+      }
       const status = Atomics.load(this.#sharedBuffer, WORKER_IDX.RCV);
       if (status > 0) {
         break;

@@ -9,16 +9,18 @@ const WORKER_IDX = Object.freeze({
   RCV: 2,
 });
 
+const EMPTY_MOD = Object.freeze({
+  id: null,
+  instance: null,
+});
+
 if (!worker.isMainThread) {
   const {sharedBuffer: SHARED_BUFFER, port: PORT} = worker.workerData;
 
   Atomics.store(SHARED_BUFFER, WORKER_IDX.READY, 1);
   Atomics.notify(SHARED_BUFFER, WORKER_IDX.READY);
 
-  let MOD = {
-    id: null,
-    instance: null,
-  };
+  let MOD = EMPTY_MOD;
 
   while (true) {
     while (true) {
@@ -44,12 +46,23 @@ if (!worker.isMainThread) {
           await MOD.instance.init();
         }
         const start = process.hrtime.bigint();
-        const ret = MOD.instance.callStrFn(fnname, arg);
+        let ret = null;
+        let reterr = null;
+        try {
+          ret = MOD.instance.callStrFn(fnname, arg);
+        } catch (err) {
+          MOD = EMPTY_MOD;
+          reterr = err;
+        }
         const end = process.hrtime.bigint();
         const deltaNS = end - start;
-        PORT.postMessage({deltaNS, ret});
+        PORT.postMessage({deltaNS, ret, reterr});
       } else {
-        PORT.postMessage({deltaNS: 0, ret: null});
+        PORT.postMessage({
+          deltaNS: 0,
+          ret: null,
+          reterr: new Error('Invalid message'),
+        });
       }
       Atomics.add(SHARED_BUFFER, WORKER_IDX.RCV, 1);
       Atomics.notify(SHARED_BUFFER, WORKER_IDX.RCV);

@@ -109,3 +109,10 @@ pub extern "C" fn long_greet(nameptr: *const u8) -> *mut u8 {
     unsafe { read_str_arg(nameptr) };
     loop {}
 }
+
+// arg is caller freed
+#[no_mangle]
+pub extern "C" fn throw_greet(nameptr: *const u8) -> *mut u8 {
+    let name = unsafe { read_str_arg(nameptr) };
+    throw_str(&format!("greet error: {}", name));
+}

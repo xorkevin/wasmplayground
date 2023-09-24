@@ -27,7 +27,7 @@ try {
       });
       return {greet1, greet2};
     });
-    console.log(res);
+    console.log('res 1', res);
   } catch (err) {
     console.log('res 1 err', err);
   }
@@ -37,20 +37,40 @@ try {
         timeoutMS: 100,
       });
     });
-    console.log(res);
+    console.log('res 2', res);
   } catch (err) {
     console.log('res 2 err', err);
   }
   try {
-    debugger;
     const res = await wasmPool.withWorker(async (worker) => {
       return worker.callStrFn(modid, mod, 'greet', 'world', {
         timeoutMS: 100,
       });
     });
-    console.log(res);
+    console.log('res 3', res);
   } catch (err) {
     console.log('res 3 err', err);
+  }
+  try {
+    const res = await wasmPool.withWorker(async (worker) => {
+      debugger;
+      return worker.callStrFn(modid, mod, 'throw_greet', 'world', {
+        timeoutMS: 100,
+      });
+    });
+    console.log('res 4', res);
+  } catch (err) {
+    console.log('res 4 err', err);
+  }
+  try {
+    const res = await wasmPool.withWorker(async (worker) => {
+      return worker.callStrFn(modid, mod, 'greet', 'world', {
+        timeoutMS: 100,
+      });
+    });
+    console.log('res 5', res);
+  } catch (err) {
+    console.log('res 5 err', err);
   }
 } finally {
   wasmPool.close();
