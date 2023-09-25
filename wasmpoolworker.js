@@ -81,13 +81,13 @@ if (!worker.isMainThread) {
       const modStart = process.hrtime.bigint();
       if (id !== MOD.id) {
         try {
-          MOD = {
+          const nextMod = {
             id,
             instance: new wasmmod.WasmModInstance(mod),
           };
-          await MOD.instance.init();
+          await nextMod.instance.init();
+          MOD = nextMod;
         } catch (err) {
-          MOD = EMPTY_MOD;
           const modEnd = process.hrtime.bigint();
           reply({
             modTimeNS: modEnd - modStart,

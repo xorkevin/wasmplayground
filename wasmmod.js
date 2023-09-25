@@ -4,82 +4,124 @@ const textEncoder = new TextEncoder();
 // TextDecoder only supports utf-8
 const textDecoder = new TextDecoder();
 
+const MAX_U32 = 2 ** 32 - 1;
+
 export class WasmModInstance {
+  #mod;
+  #heap;
+  #heapid;
+  #instance;
+
   constructor(mod) {
-    this.mod = mod;
+    this.#mod = mod;
+    this.#heap = new Map();
+    this.#heapid = 1;
+  }
+
+  #getid() {
+    let crossedBoundary = false;
+    while (this.#heap.has(this.#heapid)) {
+      this.#heapid++;
+      if (this.#heapid >= MAX_U32) {
+        if (crossedBoundary) {
+          throw new Error('failed allocating string');
+        }
+        crossedBoundary = true;
+        this.#heapid = 1;
+      }
+    }
+    return this.#heapid;
+  }
+
+  allocBytes(b) {
+    const id = this.#getid();
+    this.#heap.set(id, b);
+    return id;
+  }
+
+  free(id) {
+    const didRm = this.#heap.delete(id);
+    if (!didRm) {
+      throw new Error(`invalid mem id: ${id}`);
+    }
+  }
+
+  readMem(id) {
+    const b = this.#heap.get(id);
+    if (!b) {
+      throw new Error(`invalid mem id: ${id}`);
+    }
+    return b;
+  }
+
+  readMemAndFree(id) {
+    const b = this.readMem(id);
+    this.free(id);
+    return b;
   }
 
   async init() {
-    this.instance = await WebAssembly.instantiate(this.mod, {
+    this.#instance = await WebAssembly.instantiate(this.#mod, {
       __wasm_import: {
-        __js_throw: (ptr, size) => {
+        __wasm_str_throw: (ptr, size) => {
           const mem = new Uint8Array(
-            this.instance.exports.memory.buffer,
+            this.#instance.exports.memory.buffer,
             ptr,
             size,
           );
           throw new Error(`error from wasm mod: ${textDecoder.decode(mem)}`);
         },
+        __wasm_alloc: (ptr, size) => {
+          const mem = new Uint8Array(
+            this.#instance.exports.memory.buffer,
+            ptr,
+            size,
+          );
+          const b = new Uint8Array(size);
+          b.set(mem);
+          return this.allocBytes(b);
+        },
+        __wasm_free: (id) => {
+          this.free(id);
+        },
+        __wasm_mem_size: (id) => {
+          const b = this.readMem(id);
+          return b.length;
+        },
+        __wasm_mem_read: (id, ptr) => {
+          const b = this.readMem(id);
+          const mem = new Uint8Array(
+            this.#instance.exports.memory.buffer,
+            ptr,
+            b.length,
+          );
+          mem.set(b);
+        },
       },
     });
-
-    this.HEADER_SIZE = this.instance.exports.get_malloc_header_size();
-    if (this.HEADER_SIZE !== 4) {
-      throw new Error('header size greater than 4 bytes');
-    }
   }
 
-  mallocBytes(b) {
-    const ptr = this.instance.exports.malloc(b.length);
-    const mem = new Uint8Array(
-      this.instance.exports.memory.buffer,
-      ptr + this.HEADER_SIZE,
-      b.length,
-    );
-    mem.set(b);
-    return ptr;
-  }
-
-  free(ptr) {
-    this.instance.exports.free(ptr);
-  }
-
-  readBytes(ptr) {
-    const size = new DataView(
-      this.instance.exports.memory.buffer,
-      ptr,
-      this.HEADER_SIZE,
-    ).getUint32(0, false);
-    const mem = new Uint8Array(
-      this.instance.exports.memory.buffer,
-      ptr + this.HEADER_SIZE,
-      size,
-    );
-    return mem;
-  }
-
-  mallocString(s) {
+  allocString(s) {
     const b = textEncoder.encode(s);
-    return this.mallocBytes(b);
+    return this.allocBytes(b);
   }
 
-  readStringAndFree(ptr) {
-    try {
-      const mem = this.readBytes(ptr);
-      const str = textDecoder.decode(mem);
-      return str;
-    } finally {
-      this.free(ptr);
-    }
+  readStringAndFree(id) {
+    const b = this.readMemAndFree(id);
+    return textDecoder.decode(b);
   }
 
   callStrFn(name, arg) {
-    const argptr = this.mallocString(arg);
+    const f = this.#instance.exports[name];
+    if (!f) {
+      throw new Error(`invalid export function: ${name}`);
+    }
+    const argid = this.allocString(arg);
     try {
-      const ret = this.instance.exports[name](argptr);
+      const ret = f(argid);
       return this.readStringAndFree(ret);
     } finally {
-      this.free(argptr);
+      this.free(argid);
     }
   }
 }
