@@ -23,10 +23,10 @@ try {
   try {
     const res = await wasmPool.withWorker(async (worker) => {
       const greet1 = await worker.callStrFn(modid, mod, 'greet', 'world', {
-        timeoutMS: 100,
+        timeoutMS: 25,
       });
       const greet2 = await worker.callStrFn(modid, mod, 'greet', 'kevin', {
-        timeoutMS: 100,
+        timeoutMS: 25,
       });
       return {greet1, greet2};
     });
@@ -37,7 +37,7 @@ try {
   try {
     const res = await wasmPool.withWorker(async (worker) => {
       return worker.callStrFn(modid, mod, 'long_greet', 'world', {
-        timeoutMS: 100,
+        timeoutMS: 25,
       });
     });
     console.log('res 2', res);
@@ -47,7 +47,7 @@ try {
   try {
     const res = await wasmPool.withWorker(async (worker) => {
       return worker.callStrFn(modid, mod, 'greet', 'world', {
-        timeoutMS: 100,
+        timeoutMS: 25,
       });
     });
     console.log('res 3', res);
@@ -57,7 +57,7 @@ try {
   try {
     const res = await wasmPool.withWorker(async (worker) => {
       return worker.callStrFn(modid, mod, 'throw_greet', 'world', {
-        timeoutMS: 100,
+        timeoutMS: 25,
       });
     });
     console.log('res 4', res);
@@ -67,7 +67,7 @@ try {
   try {
     const res = await wasmPool.withWorker(async (worker) => {
       return worker.callStrFn(modid, mod, 'greet', 'world', {
-        timeoutMS: 100,
+        timeoutMS: 25,
       });
     });
     console.log('res 5', res);
@@ -77,7 +77,7 @@ try {
   try {
     const res = await wasmPool.withWorker(async (worker) => {
       return worker.callStrFn(modid, mod, 'panic_greet', 'world', {
-        timeoutMS: 100,
+        timeoutMS: 25,
       });
     });
     console.log('res 6', res);
@@ -87,7 +87,7 @@ try {
   try {
     const res = await wasmPool.withWorker(async (worker) => {
       return worker.callStrFn(modid, mod, 'greet', 'world', {
-        timeoutMS: 100,
+        timeoutMS: 25,
       });
     });
     console.log('res 7', res);
@@ -102,7 +102,7 @@ try {
         'bogus fn',
         'world',
         {
-          timeoutMS: 100,
+          timeoutMS: 25,
         },
       );
     });
@@ -113,7 +113,7 @@ try {
   try {
     const res = await wasmPool.withWorker(async (worker) => {
       return worker.callStrFn(modid, mod, 'greet', 'world', {
-        timeoutMS: 100,
+        timeoutMS: 25,
       });
     });
     console.log('res 9', res);
@@ -143,7 +143,7 @@ try {
         compileTotalTime += compileEnd - compileStart;
         const fnname = fnnames[i % fnnames.length];
         return worker.callStrFn('id_' + i, mod, fnname, 'world', {
-          timeoutMS: 100,
+          timeoutMS: 25,
         });
       });
       modTotalTime += res.modTimeNS;
