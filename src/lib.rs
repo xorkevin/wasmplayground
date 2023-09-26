@@ -1,3 +1,6 @@
+use serde;
+use serde_json;
+
 #[link(wasm_import_module = "__wasm_import")]
 extern "C" {
     fn __wasm_str_throw(ptr: *const u8, size: usize) -> !;
@@ -33,26 +36,53 @@ pub fn wasm_str_read(id: usize) -> String {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn greet(namearg: usize) -> usize {
-    let name = wasm_str_read(namearg);
-    wasm_str_alloc(&("Hello, ".to_owned() + &name))
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Person {
+    name: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Greeting {
+    message: String,
+}
+
+fn read_person_arg(arg: usize) -> Person {
+    let strarg = wasm_str_read(arg);
+    match serde_json::from_str(&strarg) {
+        Ok(v) => v,
+        Err(_) => wasm_str_throw("invalid greet arg"),
+    }
+}
+
+fn write_greeting_res(greeting: Greeting) -> usize {
+    match serde_json::to_string(&greeting) {
+        Ok(v) => wasm_str_alloc(&v),
+        Err(_) => wasm_str_throw("invalid greet arg"),
+    }
 }
 
 #[no_mangle]
-pub extern "C" fn long_greet(namearg: usize) -> usize {
-    wasm_str_read(namearg);
+pub extern "C" fn greet(arg: usize) -> usize {
+    let person = read_person_arg(arg);
+    write_greeting_res(Greeting {
+        message: format!("Hello, {}", person.name),
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn long_greet(arg: usize) -> usize {
+    read_person_arg(arg);
     loop {}
 }
 
 #[no_mangle]
-pub extern "C" fn throw_greet(namearg: usize) -> usize {
-    let name = wasm_str_read(namearg);
-    wasm_str_throw(&("greet error: ".to_owned() + &name));
+pub extern "C" fn throw_greet(arg: usize) -> usize {
+    let person = read_person_arg(arg);
+    wasm_str_throw(&format!("greet error: {}", person.name));
 }
 
 #[no_mangle]
-pub extern "C" fn panic_greet(namearg: usize) -> usize {
-    let name = wasm_str_read(namearg);
-    panic!("greet panic: {}", name);
+pub extern "C" fn panic_greet(arg: usize) -> usize {
+    let person = read_person_arg(arg);
+    panic!("greet panic: {}", person.name);
 }

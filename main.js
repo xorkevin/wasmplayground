@@ -22,12 +22,24 @@ try {
   const modid = crypto.createHash('blake2b512').update(buf).digest('base64url');
   try {
     const res = await wasmPool.withWorker(async (worker) => {
-      const greet1 = await worker.callStrFn(modid, mod, 'greet', 'world', {
-        timeoutMS: 25,
-      });
-      const greet2 = await worker.callStrFn(modid, mod, 'greet', 'kevin', {
-        timeoutMS: 25,
-      });
+      const greet1 = await worker.callJSONFn(
+        modid,
+        mod,
+        'greet',
+        {name: 'world'},
+        {
+          timeoutMS: 25,
+        },
+      );
+      const greet2 = await worker.callJSONFn(
+        modid,
+        mod,
+        'greet',
+        {name: 'kevin'},
+        {
+          timeoutMS: 25,
+        },
+      );
       return {greet1, greet2};
     });
     console.log('res 1', res);
@@ -36,9 +48,15 @@ try {
   }
   try {
     const res = await wasmPool.withWorker(async (worker) => {
-      return worker.callStrFn(modid, mod, 'long_greet', 'world', {
-        timeoutMS: 25,
-      });
+      return worker.callJSONFn(
+        modid,
+        mod,
+        'long_greet',
+        {name: 'world'},
+        {
+          timeoutMS: 25,
+        },
+      );
     });
     console.log('res 2', res);
   } catch (err) {
@@ -46,9 +64,15 @@ try {
   }
   try {
     const res = await wasmPool.withWorker(async (worker) => {
-      return worker.callStrFn(modid, mod, 'greet', 'world', {
-        timeoutMS: 25,
-      });
+      return worker.callJSONFn(
+        modid,
+        mod,
+        'greet',
+        {name: 'world'},
+        {
+          timeoutMS: 25,
+        },
+      );
     });
     console.log('res 3', res);
   } catch (err) {
@@ -56,9 +80,15 @@ try {
   }
   try {
     const res = await wasmPool.withWorker(async (worker) => {
-      return worker.callStrFn(modid, mod, 'throw_greet', 'world', {
-        timeoutMS: 25,
-      });
+      return worker.callJSONFn(
+        modid,
+        mod,
+        'throw_greet',
+        {name: 'world'},
+        {
+          timeoutMS: 25,
+        },
+      );
     });
     console.log('res 4', res);
   } catch (err) {
@@ -66,9 +96,15 @@ try {
   }
   try {
     const res = await wasmPool.withWorker(async (worker) => {
-      return worker.callStrFn(modid, mod, 'greet', 'world', {
-        timeoutMS: 25,
-      });
+      return worker.callJSONFn(
+        modid,
+        mod,
+        'greet',
+        {name: 'world'},
+        {
+          timeoutMS: 25,
+        },
+      );
     });
     console.log('res 5', res);
   } catch (err) {
@@ -76,9 +112,15 @@ try {
   }
   try {
     const res = await wasmPool.withWorker(async (worker) => {
-      return worker.callStrFn(modid, mod, 'panic_greet', 'world', {
-        timeoutMS: 25,
-      });
+      return worker.callJSONFn(
+        modid,
+        mod,
+        'panic_greet',
+        {name: 'world'},
+        {
+          timeoutMS: 25,
+        },
+      );
     });
     console.log('res 6', res);
   } catch (err) {
@@ -86,9 +128,15 @@ try {
   }
   try {
     const res = await wasmPool.withWorker(async (worker) => {
-      return worker.callStrFn(modid, mod, 'greet', 'world', {
-        timeoutMS: 25,
-      });
+      return worker.callJSONFn(
+        modid,
+        mod,
+        'greet',
+        {name: 'world'},
+        {
+          timeoutMS: 25,
+        },
+      );
     });
     console.log('res 7', res);
   } catch (err) {
@@ -96,11 +144,11 @@ try {
   }
   try {
     const res = await wasmPool.withWorker(async (worker) => {
-      return worker.callStrFn(
+      return worker.callJSONFn(
         'bogus mod id',
         'bogus mod',
         'bogus fn',
-        'world',
+        {name: 'world'},
         {
           timeoutMS: 25,
         },
@@ -112,9 +160,15 @@ try {
   }
   try {
     const res = await wasmPool.withWorker(async (worker) => {
-      return worker.callStrFn(modid, mod, 'greet', 'world', {
-        timeoutMS: 25,
-      });
+      return worker.callJSONFn(
+        modid,
+        mod,
+        'greet',
+        {name: 'world'},
+        {
+          timeoutMS: 25,
+        },
+      );
     });
     console.log('res 9', res);
   } catch (err) {
@@ -142,16 +196,22 @@ try {
         const compileEnd = process.hrtime.bigint();
         compileTotalTime += compileEnd - compileStart;
         const fnname = fnnames[i % fnnames.length];
-        return worker.callStrFn('id_' + i, mod, fnname, 'world', {
-          timeoutMS: 25,
-        });
+        return worker.callJSONFn(
+          'id_' + i,
+          mod,
+          fnname,
+          {name: 'world'},
+          {
+            timeoutMS: 25,
+          },
+        );
       });
       modTotalTime += res.modTimeNS;
       fnTotalTime += res.fnTimeNS;
       if (res.reterr) {
         throw res.reterr;
       }
-      assert.equal(res.ret, 'Hello, world');
+      assert.deepStrictEqual(res.ret, {message: 'Hello, world'});
     }),
   );
   const resultsEnd = process.hrtime.bigint();

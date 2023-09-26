@@ -1,6 +1,3 @@
-// TextEncoder only supports utf-8
-const textEncoder = new TextEncoder();
-
 // TextDecoder only supports utf-8
 const textDecoder = new TextDecoder();
 
@@ -101,25 +98,15 @@ export class WasmModInstance {
     });
   }
 
-  allocString(s) {
-    const b = textEncoder.encode(s);
-    return this.allocBytes(b);
-  }
-
-  readStringAndFree(id) {
-    const b = this.readMemAndFree(id);
-    return textDecoder.decode(b);
-  }
-
-  callStrFn(name, arg) {
+  callBytesFn(name, arg) {
     const f = this.#instance.exports[name];
     if (!f) {
       throw new Error(`invalid export function: ${name}`);
     }
-    const argid = this.allocString(arg);
+    const argid = this.allocBytes(arg);
     try {
       const ret = f(argid);
-      return this.readStringAndFree(ret);
+      return this.readMemAndFree(ret);
     } finally {
       this.free(argid);
     }

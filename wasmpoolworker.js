@@ -21,7 +21,7 @@ if (!worker.isMainThread) {
   Atomics.notify(SHARED_BUFFER, WORKER_IDX.READY);
 
   const reply = (msg) => {
-    PORT.postMessage(msg);
+    PORT.postMessage(msg, msg.ret ? [msg.ret.buffer] : []);
     Atomics.add(SHARED_BUFFER, WORKER_IDX.RCV, 1);
     Atomics.notify(SHARED_BUFFER, WORKER_IDX.RCV);
   };
@@ -47,7 +47,7 @@ if (!worker.isMainThread) {
         reply({
           modTimeNS: 0,
           fnTimeNS: 0,
-          ret: null,
+          ret: undefined,
           reterr: new Error('Invalid message'),
         });
         continue;
@@ -65,14 +65,14 @@ if (!worker.isMainThread) {
         if (!fnname || typeof fnname !== 'string') {
           throw new Error('Must provide fn name');
         }
-        if (typeof arg !== 'string') {
+        if (!(arg instanceof Uint8Array)) {
           throw new Error('Must provide fn arg');
         }
       } catch (err) {
         reply({
           modTimeNS: 0,
           fnTimeNS: 0,
-          ret: null,
+          ret: undefined,
           reterr: new Error('Invalid message'),
         });
         continue;
@@ -92,7 +92,7 @@ if (!worker.isMainThread) {
           reply({
             modTimeNS: modEnd - modStart,
             fnTimeNS: 0,
-            ret: null,
+            ret: undefined,
             reterr: new Error('Failed to instantiate module', {cause: err}),
           });
           continue;
@@ -103,7 +103,7 @@ if (!worker.isMainThread) {
       let reterr = null;
       const fnStart = process.hrtime.bigint();
       try {
-        ret = MOD.instance.callStrFn(fnname, arg);
+        ret = MOD.instance.callBytesFn(fnname, arg);
       } catch (err) {
         MOD = EMPTY_MOD;
         reterr = err;

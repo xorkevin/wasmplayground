@@ -16,6 +16,12 @@ const WORKER_IDX = Object.freeze({
   RCV: 2,
 });
 
+// TextEncoder only supports utf-8
+const textEncoder = new TextEncoder();
+
+// TextDecoder only supports utf-8
+const textDecoder = new TextDecoder();
+
 class WasmWorker {
   #workers;
   #worker;
@@ -103,7 +109,7 @@ class WasmWorker {
     return this.#isTerminating;
   }
 
-  async callStrFn(id, mod, fnname, arg, {timeoutMS = 0} = {}) {
+  async callJSONFn(id, mod, fnname, argobj, {timeoutMS = 0} = {}) {
     if (!id || typeof id !== 'string') {
       throw new Error('Must provide mod id');
     }
@@ -113,9 +119,7 @@ class WasmWorker {
     if (!fnname || typeof fnname !== 'string') {
       throw new Error('Must provide fn name');
     }
-    if (typeof arg !== 'string') {
-      throw new Error('Must provide fn arg');
-    }
+    const arg = textEncoder.encode(JSON.stringify(argobj));
 
     if (this.isTerminating) {
       if (this.#lastError) {
@@ -123,7 +127,7 @@ class WasmWorker {
       }
       throw new Error('worker terminating');
     }
-    this.#port.postMessage({id, mod, fnname, arg});
+    this.#port.postMessage({id, mod, fnname, arg}, [arg.buffer]);
     Atomics.add(this.#sharedBuffer, WORKER_IDX.SEND, 1);
     Atomics.notify(this.#sharedBuffer, WORKER_IDX.SEND);
     while (true) {
@@ -160,7 +164,21 @@ class WasmWorker {
     }
     const msg = receiveMessageOnPort(this.#port);
     Atomics.add(this.#sharedBuffer, WORKER_IDX.RCV, -1);
-    return msg && msg.message;
+    if (!msg || !msg.message) {
+      return undefined;
+    }
+    if (msg.message.reterr) {
+      return msg.message;
+    }
+    if (msg.message.ret instanceof Uint8Array) {
+      try {
+        msg.message.ret = JSON.parse(textDecoder.decode(msg.message.ret));
+      } catch (err) {
+        msg.message.reterr = err;
+        msg.message.ret = undefined;
+      }
+    }
+    return msg.message;
   }
 
   terminate() {
