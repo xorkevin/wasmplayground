@@ -66,3 +66,24 @@ export function greet(arg: u32): u32 {
     message: `Hello, ${person.name}`,
   });
 }
+
+export function long_greet(arg: u32): u32 {
+  readPersonArg(arg);
+  while (true) {}
+}
+
+export function throw_greet(arg: u32): u32 {
+  let person = readPersonArg(arg);
+  wasmStrThrow(`greet error: ${person.name}`);
+  return writeGreetingRes({
+    message: `Hello, ${person.name}`,
+  });
+}
+
+export function panic_greet(arg: u32): u32 {
+  let person = readPersonArg(arg);
+  wasmStrThrow(`greet error: ${person.name}`);
+  return writeGreetingRes({
+    message: `Hello, ${person.name}`,
+  });
+}
