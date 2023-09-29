@@ -1,0 +1,25 @@
+{
+  "name": "asmscript",
+  "version": "0.1.0",
+  "description": "",
+  "private": true,
+  "author": "kevin@xorkevin.com",
+  "main": "index.js",
+  "license": "MPL-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./build/release.js",
+      "types": "./build/release.d.ts"
+    }
+  },
+  "scripts": {
+    "asbuild": "asc assembly/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "assemblyscript": "^0.27.10",
+    "json-as": "^0.5.61",
+    "visitor-as": "^0.11.4"
+  }
+}

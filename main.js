@@ -5,7 +5,8 @@ import crypto from 'node:crypto';
 import * as pool from './wasmpool.js';
 import assert from 'node:assert';
 
-const buf = await fs.readFile('./bin/wasmplayground.wasm');
+// const buf = await fs.readFile('./bin/wasmplayground.wasm');
+const buf = await fs.readFile('./bin/asmscript.wasm');
 const mod = await WebAssembly.compile(buf);
 
 const wasmPool = new pool.WasmPool({maxThreads: 16});
