@@ -7,7 +7,7 @@ build:
 
 optimize:
 	mkdir -p ./bin
-	[ -e ./bin/wasmplayground.wasm ] && rm ./bin/wasmplayground.wasm
+	if [ -e ./bin/wasmplayground.wasm ]; then rm ./bin/wasmplayground.wasm; fi
 	wasm-opt -Os -o ./bin/wasmplayground.wasm ./target/wasm32-unknown-unknown/release/wasmplayground.wasm
 
 run:
