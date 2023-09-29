@@ -6,7 +6,6 @@
     "converge": true,
     "transform": ["json-as/transform"],
     "use": ["abort=assembly/index/envAbort"],
-    "disable": ["bulk-memory"],
     "stats": true
   }
 }
